@@ -10,9 +10,9 @@ import wget
 import time
 
 ## CFG
-cfg_model_path = "models/yourModel.pt" 
+cfg_model_path = "models/best.pt" 
 
-cfg_enable_url_download = True
+cfg_enable_url_download = False
 if cfg_enable_url_download:
     url = "https://archive.org/download/yoloTrained/yoloTrained.pt" #Configure this if you set cfg_enable_url_download to True
     cfg_model_path = f"models/{url.split('/')[-1:][0]}" #config model path from url name
@@ -39,7 +39,7 @@ def imageInput(device, src):
                 f.write(image_file.getbuffer())
 
             #call Model prediction--
-            model = torch.hub.load('ultralytics/yolov5', 'custom', path='models/yoloTrained.pt', force_reload=True) 
+            model = torch.hub.load('ultralytics/yolov5', 'custom', path='models/best.pt', force_reload=True) 
             model.cuda() if device == 'cuda' else model.cpu()
             pred = model(imgpath)
             pred.render()  # render bbox in image
