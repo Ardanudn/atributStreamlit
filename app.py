@@ -43,8 +43,8 @@ def imageInput(device, src):
 
             
             #call Model prediction--
-            bbox, class_img, result = detect_image(imgpath)
-            img = create_bbox(imgpath,bbox,class_img)
+            bbox, result,bbox_data = detect_image(img=image_file,size=(640,640),src="foto")
+            img = create_bbox(img=image_file,bbox=bbox,bbox_data=bbox_data,src="foto")
             img.save(outputpath)
 
             #--Display predicton
@@ -74,8 +74,8 @@ def imageInput(device, src):
             img = img.resize((640, 640))
             st.image(img, caption='Selected Image', use_column_width='always')
         with col2:
-            bbox, class_img, result = detect_image(image_file)
-            img = create_bbox(image_file,bbox,class_img)
+            bbox, result,bbox_data = detect_image(img=image_file,size=(640,640),src="foto")
+            img = create_bbox(img=image_file,bbox=bbox,bbox_data=bbox_data,src="foto")
             status_img = count_atribut(result)
             st1_text.markdown("**{status}**".format(status=status_img))
             #img = img.convert('RGB')
@@ -86,6 +86,7 @@ def videoInput(device, src):
     vid_file = None
     if src == 'Sample data':
         vid_file = "data/samples/videos/sample.mp4"
+        outputpath = os.path.join('data/video_output', os.path.basename(vid_file))
     else:
         uploaded_video = st.file_uploader("Upload Video", type=['mp4', 'mpeg', 'mov'])
         if uploaded_video != None:
@@ -98,51 +99,88 @@ def videoInput(device, src):
                 f.write(uploaded_video.read())  # save video to disk
 
     if vid_file:
-        st_video = open(imgpath, 'rb')
-        video_bytes = st_video.read()
-        st.video(video_bytes)
-        st.write("Uploaded Video")
-        detect(weights=cfg_model_path, source=imgpath, device=0) if device == 'cuda' else detect(weights=cfg_model_path, source=imgpath, device='cpu')
-        st_video2 = open(outputpath, 'rb')
-        video_bytes2 = st_video2.read()
-        st.video(video_bytes2)
-        st.write("Model Prediction")
+        cap = cv2.VideoCapture(vid_file)
+        fps = cap.get(cv2.CAP_PROP_FPS)
+        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        fourcc = cv2.VideoWriter_fourcc(*'MP4V')
 
-def detect_image(img, size=None):
+        out = cv2.VideoWriter(outputpath, fourcc, fps, (width, height))
+        while True:
+            ret, frame = cap.read()
+            if not ret:
+                    break
+            gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            bbox, result, bbox_data = detect_image(img=gray_frame,size=(640,640),src="video")
+            img = create_bbox(img=gray_frame,bbox=bbox,bbox_data=bbox_data,src="video")
+            out.write(img)
+            
+        cap.release()
+        out.release()
+
+
+def detect_image(img,src, size=None):
     model.conf = confidence
     img = cv2.imread(img)
     #resize jadi ukuran 224x224
     reimg = cv2.resize(img, (640,640))
     # Convert menjadi gray
-    gray_img = cv2.cvtColor(reimg, cv2.COLOR_RGB2GRAY)
+    if src == "foto":
+        gray_img = cv2.cvtColor(reimg, cv2.COLOR_RGB2GRAY)
+    else:
+        gray_img = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
 
     result = model(gray_img, size=size) if size else model(gray_img)
     bbox_data = result.pandas().xyxy[0]
     bbox = []
-    class_img = []
     for index, row in bbox_data.iterrows():
-        label = '{} {:.2f}'.format(row['name'], row['confidence'])
         bbox.append([row['xmin'], row['ymin'], row['xmax'], row['ymax']])
-        class_img.append(label)
-    return bbox,class_img,result
 
-def create_bbox(img,bbox,class_img):
-  val_transform = A.Compose([
-            A.Resize(640, 640), # our input size can be 600px
+    return bbox,result,bbox_data
+
+def create_bbox(img,bbox,bbox_data,src):
+  if src =="foto":
+    val_transform = A.Compose([
+                A.Resize(640, 640), # our input size can be 600px
+                ToTensorV2()
+            ])
+  elif src == "video":
+    val_transform = A.Compose([
             ToTensorV2()
         ])
+    
   image = cv2.imread(img)
   image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
   image = image/255
   image = val_transform(image=image)
-  img_int = torch.tensor(image['image']*255, dtype=torch.uint8)
+  img_int = image['image'].clone().detach().mul(255).to(torch.uint8)
 
   bbox = torch.tensor(bbox, dtype=torch.int)
-  img=draw_bounding_boxes(img_int, bbox, width=3,
-  labels=class_img,
-  font_size=32)
+  img=draw_bounding_boxes(img_int, bbox, width=8)
   image = torchvision.transforms.ToPILImage()(img)
-  return image
+  
+  image_with_boxes = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
+
+  for index, row in bbox_data.iterrows():
+        label = '{} {:.2f}'.format(row['name'], row['confidence'])
+        xmin, ymin, xmax, ymax = (
+            int(row['xmin']),
+            int(row['ymin']),
+            int(row['xmax']),
+            int(row['ymax']),
+        )
+        cv2.putText(
+            image_with_boxes,
+            label,
+            (xmin, ymin - 5),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.6,
+            (0, 255, 0),  # font color (BGR format)
+            1,
+            cv2.LINE_AA,
+        )
+
+  return image_with_boxes
 
 def count_atribut(result):
   lengkap = 0
