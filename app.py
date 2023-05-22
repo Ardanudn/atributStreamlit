@@ -85,7 +85,7 @@ def imageInput(device, src):
 def videoInput(device, src):
     vid_file = None
     if src == 'Sample data':
-        vid_file = "data/samples/videos/sample.mp4"
+        vid_file = "data/samples/videos/sd.mp4"
         outputpath = os.path.join('data/video_output', os.path.basename(vid_file))
     else:
         uploaded_video = st.file_uploader("Upload Video", type=['mp4', 'mpeg', 'mov'])
@@ -112,7 +112,7 @@ def videoInput(device, src):
                 if not ret:
                         break
                 gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-                bbox, result, bbox_data = detect_image(img=gray_frame,size=(640,640),src="video")
+                bbox, result, bbox_data = detect_image(img=gray_frame,src="video")
                 img = create_bbox(img=gray_frame,bbox=bbox,bbox_data=bbox_data,src="video")
                 out.write(img)
 
@@ -124,11 +124,9 @@ def videoInput(device, src):
 
 def detect_image(img,src, size=None):
     model.conf = confidence
-    img = cv2.imread(img)
-    #resize jadi ukuran 224x224
-    reimg = cv2.resize(img, (640,640))
-    # Convert menjadi gray
     if src == "foto":
+        img = cv2.imread(img)
+        reimg = cv2.resize(img, (640,640))
         gray_img = cv2.cvtColor(reimg, cv2.COLOR_RGB2GRAY)
     else:
         gray_img = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
@@ -163,7 +161,7 @@ def create_bbox(img,bbox,bbox_data,src):
   image = torchvision.transforms.ToPILImage()(img)
   
   if src =="foto":
-    image_with_boxes = image   
+    image_with_boxes = np.array(image)  
   else:
     image_with_boxes = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
 
@@ -226,7 +224,7 @@ def main():
     else:
         # device options
         if torch.cuda.is_available():
-            deviceoption = st.sidebar.radio("Select Device", ['cpu', 'cuda'], disabled=False, index=0)
+            deviceoption = st.sidebar.radio("Select Device", ['cpu', 'cuda'], disabled=False, index=1)
         else:
             deviceoption = st.sidebar.radio("Select Device", ['cpu', 'cuda'], disabled=True, index=0)
         
