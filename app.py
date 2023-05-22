@@ -97,26 +97,29 @@ def videoInput(device, src):
 
             with open(imgpath, mode='wb') as f:
                 f.write(uploaded_video.read())  # save video to disk
+    
+    with st.spinner('Wait for it...'):
+        if vid_file:
+            cap = cv2.VideoCapture(vid_file)
+            fps = cap.get(cv2.CAP_PROP_FPS)
+            width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+            height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+            fourcc = cv2.VideoWriter_fourcc(*'MP4V')
 
-    if vid_file:
-        cap = cv2.VideoCapture(vid_file)
-        fps = cap.get(cv2.CAP_PROP_FPS)
-        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        fourcc = cv2.VideoWriter_fourcc(*'MP4V')
+            out = cv2.VideoWriter(outputpath, fourcc, fps, (width, height))
+            while True:
+                ret, frame = cap.read()
+                if not ret:
+                        break
+                gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                bbox, result, bbox_data = detect_image(img=gray_frame,size=(640,640),src="video")
+                img = create_bbox(img=gray_frame,bbox=bbox,bbox_data=bbox_data,src="video")
+                out.write(img)
 
-        out = cv2.VideoWriter(outputpath, fourcc, fps, (width, height))
-        while True:
-            ret, frame = cap.read()
-            if not ret:
-                    break
-            gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-            bbox, result, bbox_data = detect_image(img=gray_frame,size=(640,640),src="video")
-            img = create_bbox(img=gray_frame,bbox=bbox,bbox_data=bbox_data,src="video")
-            out.write(img)
-
-        cap.release()
-        out.release()
+            cap.release()
+            out.release()
+    st.success("Done")
+    st.video(outputpath)
 
 
 def detect_image(img,src, size=None):
@@ -144,7 +147,7 @@ def create_bbox(img,bbox,bbox_data,src):
                 A.Resize(640, 640), # our input size can be 600px
                 ToTensorV2()
             ])
-  elif src == "video":
+  else:
     val_transform = A.Compose([
             ToTensorV2()
         ])
@@ -160,11 +163,11 @@ def create_bbox(img,bbox,bbox_data,src):
   image = torchvision.transforms.ToPILImage()(img)
   
   if src =="foto":
+    image_with_boxes = image   
+  else:
     image_with_boxes = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
-  elif src == "video":
-    image_with_boxes = image
 
-    
+
   for index, row in bbox_data.iterrows():
         label = '{} {:.2f}'.format(row['name'], row['confidence'])
         xmin, ymin, xmax, ymax = (
