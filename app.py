@@ -114,7 +114,7 @@ def videoInput(device, src):
             bbox, result, bbox_data = detect_image(img=gray_frame,size=(640,640),src="video")
             img = create_bbox(img=gray_frame,bbox=bbox,bbox_data=bbox_data,src="video")
             out.write(img)
-            
+
         cap.release()
         out.release()
 
@@ -159,8 +159,12 @@ def create_bbox(img,bbox,bbox_data,src):
   img=draw_bounding_boxes(img_int, bbox, width=8)
   image = torchvision.transforms.ToPILImage()(img)
   
-  image_with_boxes = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
+  if src =="foto":
+    image_with_boxes = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
+  elif src == "video":
+    image_with_boxes = image
 
+    
   for index, row in bbox_data.iterrows():
         label = '{} {:.2f}'.format(row['name'], row['confidence'])
         xmin, ymin, xmax, ymax = (
