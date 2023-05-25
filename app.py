@@ -1,6 +1,7 @@
 import streamlit as st
 import torch
 from detect import detect
+from pathlib import Path
 from PIL import Image
 from io import *
 import glob
@@ -43,18 +44,14 @@ def imageInput(device, src):
 
             
             #call Model prediction--
-            bbox, result,bbox_data = detect_image(img=image_file,size=(640,640),src="foto")
-            img = create_bbox(img=image_file,bbox=bbox,bbox_data=bbox_data,src="foto")
-            img.save(outputpath)
+            bbox, result,bbox_data = detect_image(image=imgpath,src="foto")
+            img = create_bbox(img=imgpath,bbox=bbox,bbox_data=bbox_data,src="foto")
 
-            #--Display predicton
-            
-            img_ = Image.open(outputpath)
             with col2:
                 status_img = count_atribut(result)
                 st1_text.markdown("**{status}**".format(status=status_img))
                 
-                st.image(img_, caption='Model Prediction(s)', use_column_width='always')
+                st.image(img, caption='Model Prediction(s)', use_column_width='always')
 
     elif src == 'Sample data': 
         
@@ -74,7 +71,7 @@ def imageInput(device, src):
             img = img.resize((640, 640))
             st.image(img, caption='Selected Image', use_column_width='always')
         with col2:
-            bbox, result,bbox_data = detect_image(img=image_file,size=(640,640),src="foto")
+            bbox, result,bbox_data = detect_image(image=image_file,size=(640,640),src="foto")
             img = create_bbox(img=image_file,bbox=bbox,bbox_data=bbox_data,src="foto")
             status_img = count_atribut(result)
             st1_text.markdown("**{status}**".format(status=status_img))
@@ -92,46 +89,111 @@ def videoInput(device, src):
         if uploaded_video != None:
 
             ts = datetime.timestamp(datetime.now())
-            imgpath = os.path.join('data/uploads', str(ts)+uploaded_video.name)
-            outputpath = os.path.join('data/video_output', os.path.basename(imgpath))
+            vid_file = os.path.join('data/uploads', str(ts)+uploaded_video.name)
+            outputpath = os.path.join('data/video_output', os.path.basename(vid_file))
 
-            with open(imgpath, mode='wb') as f:
+            with open(vid_file, mode='wb') as f:
                 f.write(uploaded_video.read())  # save video to disk
     
-    with st.spinner('Wait for it...'):
-        if vid_file:
+    
+    if vid_file:
+      with st.spinner('Load Video'):
+        video_file = open(vid_file, 'rb') #enter the filename with filepath
+
+        video_bytes = video_file.read() #reading the file
+
+        st.video(video_bytes)
+
+      with st.spinner('Wait for it...'):
             cap = cv2.VideoCapture(vid_file)
             fps = cap.get(cv2.CAP_PROP_FPS)
             width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
             height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-            fourcc = cv2.VideoWriter_fourcc(*'MP4V')
+            fourcc = cv2.VideoWriter_fourcc(*'mp4v')
 
             out = cv2.VideoWriter(outputpath, fourcc, fps, (width, height))
+            results = []
             while True:
                 ret, frame = cap.read()
                 if not ret:
                         break
+
                 gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-                bbox, result, bbox_data = detect_image(img=gray_frame,src="video")
-                img = create_bbox(img=gray_frame,bbox=bbox,bbox_data=bbox_data,src="video")
-                out.write(img)
+                model.conf = 0.45
+                result = model(gray_frame)
+                bbox_data = result.pandas().xyxy[0]
+                results.append(bbox_data)
+                bbox = []
+                class_img = []
+                for index, row in bbox_data.iterrows():
+                  label = '{} {:.2f}'.format(row['name'], row['confidence'])
+                  bbox.append([row['xmin'], row['ymin'], row['xmax'], row['ymax']])
+                  class_img.append(label)
+
+                val_transform = A.Compose([
+                          ToTensorV2()
+                      ])
+                image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                image = image/255
+                image = val_transform(image=image)
+                img_int = image['image'].clone().detach().mul(255).to(torch.uint8)
+                bbox = torch.tensor(bbox, dtype=torch.int)
+
+                if bbox.size() != torch.Size([0]):
+                  img=draw_bounding_boxes(img_int, bbox, width=8)
+                  image = torchvision.transforms.ToPILImage()(img)
+                else:
+                  image= torchvision.transforms.ToPILImage()(img_int)
+
+                # Convert PIL image to OpenCV format
+                image_with_boxes = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
+
+                for index, row in bbox_data.iterrows():
+                      label = '{} {:.2f}'.format(row['name'], row['confidence'])
+                      xmin, ymin, xmax, ymax = (
+                          int(row['xmin']),
+                          int(row['ymin']),
+                          int(row['xmax']),
+                          int(row['ymax']),
+                      )
+                      cv2.putText(
+                          image_with_boxes,
+                          label,
+                          (xmin, ymin - 5),
+                          cv2.FONT_HERSHEY_SIMPLEX,
+                          0.6,
+                          (0, 255, 0),  # font color (BGR format)
+                          1,
+                          cv2.LINE_AA,
+                      )
+
+                # Write the frame with bounding boxes to the new video
+                out.write(image_with_boxes)
+
 
             cap.release()
             out.release()
-    st.success("Done")
-    st.video(outputpath)
 
+      st.success("Done")
 
-def detect_image(img,src, size=None):
+      with open(outputpath, 'rb') as file:
+        st.download_button(
+              label="Download video result",
+              data=file,
+              file_name=os.path.basename(outputpath),
+              mime="video/mp4")
+
+def detect_image(image,src, size=None):
     model.conf = confidence
     if src == "foto":
-        img = cv2.imread(img)
+        img = cv2.imread(image)
         reimg = cv2.resize(img, (640,640))
         gray_img = cv2.cvtColor(reimg, cv2.COLOR_RGB2GRAY)
+        result = model(gray_img, size=size) if size else model(gray_img)
     else:
-        gray_img = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
+        result = model(image, size=size) if size else model(image)
 
-    result = model(gray_img, size=size) if size else model(gray_img)
+    
     bbox_data = result.pandas().xyxy[0]
     bbox = []
     for index, row in bbox_data.iterrows():
@@ -145,21 +207,28 @@ def create_bbox(img,bbox,bbox_data,src):
                 A.Resize(640, 640), # our input size can be 600px
                 ToTensorV2()
             ])
+    image = cv2.imread(img)
+    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    image = image/255
+    image = val_transform(image=image)
+    img_int = image['image'].clone().detach().mul(255).to(torch.uint8)
   else:
     val_transform = A.Compose([
             ToTensorV2()
         ])
     
-  image = cv2.imread(img)
-  image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-  image = image/255
-  image = val_transform(image=image)
-  img_int = image['image'].clone().detach().mul(255).to(torch.uint8)
+    image = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    image = image/255
+    image = val_transform(image=image)
+    img_int = image['image'].clone().detach().mul(255).to(torch.uint8)
+    
 
   bbox = torch.tensor(bbox, dtype=torch.int)
-  img=draw_bounding_boxes(img_int, bbox, width=8)
-  image = torchvision.transforms.ToPILImage()(img)
-  
+  if bbox.size() != torch.Size([0]):
+    img=draw_bounding_boxes(img_int, bbox, width=8)
+    image = torchvision.transforms.ToPILImage()(img)
+  else:
+    image= torchvision.transforms.ToPILImage()(img_int)
   if src =="foto":
     image_with_boxes = np.array(image)  
   else:
@@ -188,20 +257,23 @@ def create_bbox(img,bbox,bbox_data,src):
   return image_with_boxes
 
 def count_atribut(result):
-  lengkap = 0
-  frame_lengkap = -1
 
   for i in range(len(result.pandas().xyxy)):
     class_list = []
     for j in result.pandas().xyxy[i]['class']:
       class_list.append(j)
-    if set(class_list) == set([0, 1, 2, 3]):
-      lengkap = 1
-      frame_lengkap = i
-      status = 'Atribut siswa lengkap!'
+  
+    if len(class_list) != 0:
+      if set(class_list) == set([0, 1, 2, 3]):
+        # lengkap = 1
+        # frame_lengkap = i
+        status = 'Atribut siswa lengkap!'
+        break
+      else:
+        status = 'Atribut siswa tidak lengkap!'
+    else:
+      status = "Tidak ada atribut!"
       break
-  if lengkap != 1:
-    status = 'Atribut siswa tidak lengkap!'
   return status
 
 @st.cache_resource
