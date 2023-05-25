@@ -79,10 +79,12 @@ def imageInput(device, src):
             st.image(img, caption="Model prediction")
 
 
-def videoInput(device, src):
+def videoInput(device, src,video):
     vid_file = None
     if src == 'Sample data':
-        vid_file = "data/samples/videos/sd.mp4"
+
+
+        vid_file = "data/samples/videos/{opt}.mp4".format(opt = video)
         outputpath = os.path.join('data/video_output', os.path.basename(vid_file))
     else:
         uploaded_video = st.file_uploader("Upload Video", type=['mp4', 'mpeg', 'mov'])
@@ -307,6 +309,12 @@ def main():
 
         datasrc = st.sidebar.radio("Select input source.", ['Sample data', 'Upload your own data'])
 
+        if option == "Video" and datasrc == "Sample data":
+          video = st.sidebar.selectbox(
+            'Select Sample File',
+            ('SD', 'SMP', 'SMA'))
+
+
         # confidence slider
         confidence = st.sidebar.slider('Confidence', min_value=0.1, max_value=1.0, value=.45)
 
@@ -316,7 +324,7 @@ def main():
         if option == "Image":    
             imageInput(deviceoption, datasrc)
         elif option == "Video": 
-            videoInput(deviceoption, datasrc)
+            videoInput(deviceoption, datasrc,video)
 
 if __name__ == '__main__':
   
