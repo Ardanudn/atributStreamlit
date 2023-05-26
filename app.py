@@ -79,7 +79,7 @@ def imageInput(device, src):
             st.image(img, caption="Model prediction")
 
 
-def videoInput(device, src,video):
+def videoInput(device, src,video=None):
     vid_file = None
     if src == 'Sample data':
 
@@ -313,6 +313,12 @@ def main():
           video = st.sidebar.selectbox(
             'Select Sample File',
             ('SD', 'SMP', 'SMA'))
+          videoInput(deviceoption, datasrc,video)
+        elif option == "Video" and datasrc == "Upload your own data": 
+          videoInput(deviceoption, datasrc)
+        elif option == "Image":    
+          imageInput(deviceoption, datasrc)
+        
 
 
         # confidence slider
@@ -320,11 +326,6 @@ def main():
 
         # -- End of Sidebar
 
-        
-        if option == "Image":    
-            imageInput(deviceoption, datasrc)
-        elif option == "Video": 
-            videoInput(deviceoption, datasrc,video)
 
 if __name__ == '__main__':
   
