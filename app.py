@@ -27,9 +27,6 @@ def imageInput(device, src):
     status = "Loading..."
     if src == 'Upload your own data':
         image_file = st.file_uploader("Upload An Image", type=['png', 'jpeg', 'jpg'])
-        with st.columns(3)[1]:
-                st.header("Status")
-                st1_text = st.markdown("{status}".format(status=status))
                 
         col1, col2 = st.columns(2)
         if image_file is not None:
@@ -48,21 +45,19 @@ def imageInput(device, src):
             img = create_bbox(img=imgpath,bbox=bbox,bbox_data=bbox_data,src="foto")
 
             with col2:
-                status_img = count_atribut(result)
-                st1_text.markdown("**{status}**".format(status=status_img))
-                
+                status_img = count_atribut_image(result)
                 st.image(img, caption='Model Prediction(s)', use_column_width='always')
+
+            with st.columns(3)[1]:
+                st.header("Status")
+            with st.columns(3)[1]:
+                st.markdown("{status}".format(status=status_img))
 
     elif src == 'Sample data': 
         
         # Image selector slider
         imgpath = glob.glob('data/samples/images/*')
         imgsel = st.slider('Select random images from samples image.', min_value=1, max_value=len(imgpath), step=1)
-
-        
-        with st.columns(3)[1]:
-            st.header("Status")
-            st1_text = st.markdown("{status}".format(status=status))
 
         image_file = imgpath[imgsel-1]
         col1, col2 = st.columns(2)
@@ -73,10 +68,14 @@ def imageInput(device, src):
         with col2:
             bbox, result,bbox_data = detect_image(image=image_file,size=(640,640),src="foto")
             img = create_bbox(img=image_file,bbox=bbox,bbox_data=bbox_data,src="foto")
-            status_img = count_atribut(result)
-            st1_text.markdown("**{status}**".format(status=status_img))
+            status_img = count_atribut_image(result)
             #img = img.convert('RGB')
             st.image(img, caption="Model prediction")
+
+        with st.columns(3)[1]:
+            st.header("Status")
+        with st.columns(3)[1]:
+            st.markdown("{status}".format(status=status_img))
 
 
 def videoInput(device, src,video=None):
@@ -105,6 +104,7 @@ def videoInput(device, src,video=None):
         video_bytes = video_file.read() #reading the file
 
         st.video(video_bytes)
+      class_list_all_frames = []
 
       with st.spinner('Wait for it...'):
             cap = cv2.VideoCapture(vid_file)
@@ -114,7 +114,6 @@ def videoInput(device, src,video=None):
             fourcc = cv2.VideoWriter_fourcc(*'mp4v')
 
             out = cv2.VideoWriter(outputpath, fourcc, fps, (width, height))
-            results = []
             while True:
                 ret, frame = cap.read()
                 if not ret:
@@ -124,13 +123,16 @@ def videoInput(device, src,video=None):
                 model.conf = 0.45
                 result = model(gray_frame)
                 bbox_data = result.pandas().xyxy[0]
-                results.append(bbox_data)
                 bbox = []
                 class_img = []
+                class_list_per_frame = []
                 for index, row in bbox_data.iterrows():
                   label = '{} {:.2f}'.format(row['name'], row['confidence'])
                   bbox.append([row['xmin'], row['ymin'], row['xmax'], row['ymax']])
                   class_img.append(label)
+                  class_list_per_frame.append(row['class'])
+
+                class_list_all_frames.append(class_list_per_frame)
 
                 val_transform = A.Compose([
                           ToTensorV2()
@@ -177,6 +179,13 @@ def videoInput(device, src,video=None):
             out.release()
 
       st.success("Done")
+
+      with st.columns(3)[1]:
+          st.header("Status")
+
+      with st.columns(3)[1]:
+          status_vid = count_atribut_video(class_list_all_frames)
+          st.markdown("{status}".format(status=status_vid))
 
       with open(outputpath, 'rb') as file:
         st.download_button(
@@ -258,7 +267,7 @@ def create_bbox(img,bbox,bbox_data,src):
 
   return image_with_boxes
 
-def count_atribut(result):
+def count_atribut_image(result):
 
   for i in range(len(result.pandas().xyxy)):
     class_list = []
@@ -266,6 +275,7 @@ def count_atribut(result):
       class_list.append(j)
   
     if len(class_list) != 0:
+
       if set(class_list) == set([0, 1, 2, 3]):
         # lengkap = 1
         # frame_lengkap = i
@@ -276,6 +286,97 @@ def count_atribut(result):
     else:
       status = "Tidak ada atribut!"
       break
+
+  atribut_ada = "\nAtribut yang dipakai:\n"
+  atribut_tidak_ada = ". Atribut yang tidak dipakai:\n"
+
+  if len(class_list) != 0:
+    if 0 in class_list:
+      atribut_ada += "--Badge\n"
+    else:
+      atribut_tidak_ada += "--Badge\n"
+    if 1 in class_list:
+      atribut_ada += "--Dasi\n"
+    else:
+      atribut_tidak_ada += "--Dasi\n"
+    if 2 in class_list:
+      atribut_ada += "--Sabuk\n"
+    else:
+      atribut_tidak_ada += "--Sabuk\n"
+    if 3 in class_list:
+      atribut_ada += "--Topi\n"
+    else:
+      atribut_tidak_ada += "--Topi\n"
+  
+  if len(class_list) == 0:
+    atribut_tidak_ada += "--Badge\n--Dasi\n--Sabuk\n--Topi"
+  
+  status += (atribut_ada + atribut_tidak_ada)
+
+  return status
+
+def count_atribut_video(class_list_all_frames):
+  status = "Atribut siswa tidak lengkap!"
+  minimum_deteksi_frame = 6
+  count_0_badge = 0
+  count_1_dasi = 0
+  count_2_sabuk = 0
+  count_3_topi = 0
+
+  for i in class_list_all_frames:
+    if len(i) != 0:
+    #if len(result.pandas().xyxy[i]['class'].unique()) == 4:
+      if set(i) == set([0,1,2,3]):
+        count_0_badge += 1
+        count_1_dasi += 1
+        count_2_sabuk += 1
+        count_3_topi += 1
+        if ((count_0_badge >= minimum_deteksi_frame) and (count_1_dasi >= minimum_deteksi_frame) and (count_2_sabuk >= minimum_deteksi_frame) and (count_3_topi >= minimum_deteksi_frame)):
+          status = "Atribut siswa lengkap!"
+          break
+        continue
+      if 0 in i:
+        count_0_badge += 1
+      if 1 in i:
+        count_1_dasi += 1
+      if 2 in i:
+        count_2_sabuk += 1
+      if 3 in i:
+        count_3_topi += 1
+      if ((count_0_badge >= minimum_deteksi_frame) and (count_1_dasi >= minimum_deteksi_frame) and (count_2_sabuk >= minimum_deteksi_frame) and (count_3_topi >= minimum_deteksi_frame)):
+        status = "Atribut siswa lengkap!"
+        break
+    else:
+      continue
+
+  atribut_ada = "\nAtribut yang dipakai:\n"
+  atribut_tidak_ada = ". Atribut yang tidak dipakai:\n"
+
+  if status == "Atribut siswa lengkap!":
+    status += (atribut_ada + " --Badge\n--Dasi\n--Sabuk\n--Topi" + atribut_tidak_ada)
+  else:
+    if count_0_badge + count_1_dasi + count_2_sabuk + count_3_topi > 0:
+      if count_0_badge >= minimum_deteksi_frame:
+        atribut_ada += "--Badge\n"
+      else:
+        atribut_tidak_ada += "--Badge\n"
+      if count_1_dasi >= minimum_deteksi_frame:
+        atribut_ada += "--Dasi\n"
+      else:
+        atribut_tidak_ada += "--Dasi\n"
+      if count_2_sabuk >= minimum_deteksi_frame:
+        atribut_ada += "--Sabuk\n"
+      else:
+        atribut_tidak_ada += "--Sabuk\n"
+      if count_3_topi >= minimum_deteksi_frame:
+        atribut_ada += "--Topi\n"
+      else:
+        atribut_tidak_ada += "--Topi\n"
+  
+      status += (atribut_ada + atribut_tidak_ada)
+    else:
+      status += (atribut_ada + atribut_tidak_ada + "--Badge --Dasi --Sabuk --Topi")
+
   return status
 
 @st.cache_resource
