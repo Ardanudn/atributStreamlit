@@ -1,5 +1,6 @@
 import streamlit as st
 import torch
+import subprocess
 from detect import detect
 from pathlib import Path
 from PIL import Image
@@ -31,6 +32,7 @@ def imageInput(device, src):
         col1, col2 = st.columns(2)
         if image_file is not None:
             img = Image.open(image_file)
+            img = img.resize((640, 640))
             with col1:
                 st.image(img, caption='Uploaded Image', use_column_width='always')
             ts = datetime.timestamp(datetime.now())
@@ -42,11 +44,11 @@ def imageInput(device, src):
             
             #call Model prediction--
             bbox, result,bbox_data = detect_image(image=imgpath,src="foto")
-            img = create_bbox(img=imgpath,bbox=bbox,bbox_data=bbox_data,src="foto")
+            imgp = create_bbox(img=imgpath,bbox=bbox,bbox_data=bbox_data,src="foto")
 
             with col2:
                 status_img = count_atribut_image(result)
-                st.image(img, caption='Model Prediction(s)', use_column_width='always')
+                st.image(imgp, caption='Model Prediction(s)', use_column_width='always')
 
             with st.columns(3)[1]:
                 st.header("Status")
@@ -96,87 +98,104 @@ def videoInput(device, src,video=None):
             with open(vid_file, mode='wb') as f:
                 f.write(uploaded_video.read())  # save video to disk
     
-    
+    col1, col2 = st.columns(2)
     if vid_file:
-      with st.spinner('Load Video'):
-        video_file = open(vid_file, 'rb') #enter the filename with filepath
+      with col1:
+        with st.spinner('Load Video'):
+          video_file = open(vid_file, 'rb') #enter the filename with filepath
 
-        video_bytes = video_file.read() #reading the file
+          video_bytes = video_file.read() #reading the file
 
-        st.video(video_bytes)
+          st.video(video_bytes)
       class_list_all_frames = []
+      with col2:
+        with st.spinner('Wait for it...'):
+              cap = cv2.VideoCapture(vid_file)
+              fps = cap.get(cv2.CAP_PROP_FPS)
+              width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+              height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+              fourcc = cv2.VideoWriter_fourcc(*'mp4v')
 
-      with st.spinner('Wait for it...'):
-            cap = cv2.VideoCapture(vid_file)
-            fps = cap.get(cv2.CAP_PROP_FPS)
-            width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-            height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-            fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+              out = cv2.VideoWriter(outputpath, fourcc, fps, (width, height))
+              while True:
+                  ret, frame = cap.read()
+                  if not ret:
+                          break
 
-            out = cv2.VideoWriter(outputpath, fourcc, fps, (width, height))
-            while True:
-                ret, frame = cap.read()
-                if not ret:
-                        break
+                  gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                  model.conf = 0.45
+                  result = model(gray_frame)
+                  bbox_data = result.pandas().xyxy[0]
+                  bbox = []
+                  class_img = []
+                  class_list_per_frame = []
+                  for index, row in bbox_data.iterrows():
+                    label = '{} {:.2f}'.format(row['name'], row['confidence'])
+                    bbox.append([row['xmin'], row['ymin'], row['xmax'], row['ymax']])
+                    class_img.append(label)
+                    class_list_per_frame.append(row['class'])
 
-                gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-                model.conf = 0.45
-                result = model(gray_frame)
-                bbox_data = result.pandas().xyxy[0]
-                bbox = []
-                class_img = []
-                class_list_per_frame = []
-                for index, row in bbox_data.iterrows():
-                  label = '{} {:.2f}'.format(row['name'], row['confidence'])
-                  bbox.append([row['xmin'], row['ymin'], row['xmax'], row['ymax']])
-                  class_img.append(label)
-                  class_list_per_frame.append(row['class'])
+                  class_list_all_frames.append(class_list_per_frame)
 
-                class_list_all_frames.append(class_list_per_frame)
+                  val_transform = A.Compose([
+                            ToTensorV2()
+                        ])
+                  image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                  image = image/255
+                  image = val_transform(image=image)
+                  img_int = image['image'].clone().detach().mul(255).to(torch.uint8)
+                  bbox = torch.tensor(bbox, dtype=torch.int)
 
-                val_transform = A.Compose([
-                          ToTensorV2()
-                      ])
-                image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                image = image/255
-                image = val_transform(image=image)
-                img_int = image['image'].clone().detach().mul(255).to(torch.uint8)
-                bbox = torch.tensor(bbox, dtype=torch.int)
+                  if bbox.size() != torch.Size([0]):
+                    img=draw_bounding_boxes(img_int, bbox, width=8)
+                    image = torchvision.transforms.ToPILImage()(img)
+                  else:
+                    image= torchvision.transforms.ToPILImage()(img_int)
 
-                if bbox.size() != torch.Size([0]):
-                  img=draw_bounding_boxes(img_int, bbox, width=8)
-                  image = torchvision.transforms.ToPILImage()(img)
-                else:
-                  image= torchvision.transforms.ToPILImage()(img_int)
+                  # Convert PIL image to OpenCV format
+                  image_with_boxes = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
 
-                # Convert PIL image to OpenCV format
-                image_with_boxes = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
+                  for index, row in bbox_data.iterrows():
+                        label = '{} {:.2f}'.format(row['name'], row['confidence'])
+                        xmin, ymin, xmax, ymax = (
+                            int(row['xmin']),
+                            int(row['ymin']),
+                            int(row['xmax']),
+                            int(row['ymax']),
+                        )
+                        cv2.putText(
+                            image_with_boxes,
+                            label,
+                            (xmin, ymin - 5),
+                            cv2.FONT_HERSHEY_SIMPLEX,
+                            0.6,
+                            (0, 255, 0),  # font color (BGR format)
+                            1,
+                            cv2.LINE_AA,
+                        )
 
-                for index, row in bbox_data.iterrows():
-                      label = '{} {:.2f}'.format(row['name'], row['confidence'])
-                      xmin, ymin, xmax, ymax = (
-                          int(row['xmin']),
-                          int(row['ymin']),
-                          int(row['xmax']),
-                          int(row['ymax']),
-                      )
-                      cv2.putText(
-                          image_with_boxes,
-                          label,
-                          (xmin, ymin - 5),
-                          cv2.FONT_HERSHEY_SIMPLEX,
-                          0.6,
-                          (0, 255, 0),  # font color (BGR format)
-                          1,
-                          cv2.LINE_AA,
-                      )
-
-                # Write the frame with bounding boxes to the new video
-                out.write(image_with_boxes)
+                  # Write the frame with bounding boxes to the new video
+                  out.write(image_with_boxes)
 
 
-            cap.release()
-            out.release()
+              cap.release()
+              out.release()
+
+        filename, extension = os.path.splitext(outputpath)
+        output_file = os.path.join(filename+"codec" + extension)
+        command = f"ffmpeg -i {outputpath} -vcodec libx264 {output_file}"
+
+        try:
+          subprocess.check_output(command, shell=True)
+          print("Video conversion successful.")
+        except subprocess.CalledProcessError as e:
+          print("Video conversion failed:", e)
+        video_file2 = open(output_file, 'rb') #enter the filename with filepath
+
+        video_bytes2 = video_file2.read() #reading the file
+
+        st.video(video_bytes2)
+
 
       st.success("Done")
 
@@ -188,7 +207,7 @@ def videoInput(device, src,video=None):
           st.markdown("{status}".format(status=status_vid))
 
       with open(outputpath, 'rb') as file:
-        st.download_button(
+        st.sidebar.download_button(
               label="Download video result",
               data=file,
               file_name=os.path.basename(outputpath),
@@ -240,6 +259,7 @@ def create_bbox(img,bbox,bbox_data,src):
     image = torchvision.transforms.ToPILImage()(img)
   else:
     image= torchvision.transforms.ToPILImage()(img_int)
+
   if src =="foto":
     image_with_boxes = np.array(image)  
   else:
@@ -409,6 +429,12 @@ def main():
         option = st.sidebar.radio("Select input type.", ['Image', 'Video'])
 
         datasrc = st.sidebar.radio("Select input source.", ['Sample data', 'Upload your own data'])
+        
+
+        # confidence slider
+        confidence = st.sidebar.slider('Confidence', min_value=0.1, max_value=1.0, value=.45)
+
+        # -- End of Sidebar
 
         if option == "Video" and datasrc == "Sample data":
           video = st.sidebar.selectbox(
@@ -419,13 +445,6 @@ def main():
           videoInput(deviceoption, datasrc)
         elif option == "Image":    
           imageInput(deviceoption, datasrc)
-        
-
-
-        # confidence slider
-        confidence = st.sidebar.slider('Confidence', min_value=0.1, max_value=1.0, value=.45)
-
-        # -- End of Sidebar
 
 
 if __name__ == '__main__':
