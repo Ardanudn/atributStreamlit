@@ -26,9 +26,22 @@ model = None
 
 def imageInput(device, src):
     status = "Loading..."
+    ada = "Loading..."
+    tidak = "Loading..."
+
     if src == 'Upload your own data':
         image_file = st.file_uploader("Upload An Image", type=['png', 'jpeg', 'jpg'])
                 
+        with st.columns(3)[1]:
+            st.header("Status")
+            st1_status = st.markdown("{status}".format(status=status))
+        col1,col2,col3,col4 = st.columns(4)
+        
+        with col2:
+            st2_ada = st.markdown("{ada}".format(ada=ada),unsafe_allow_html=True)
+        with col3:
+            st3_tidak = st.markdown("{tidak}".format(tidak=tidak),unsafe_allow_html=True)
+
         col1, col2 = st.columns(2)
         if image_file is not None:
             img = Image.open(image_file)
@@ -47,19 +60,28 @@ def imageInput(device, src):
             imgp = create_bbox(img=imgpath,bbox=bbox,bbox_data=bbox_data,src="foto")
 
             with col2:
-                status_img = count_atribut_image(result)
+                status_img,atribut_ada,atribut_tidak_ada = count_atribut_image(result)
                 st.image(imgp, caption='Model Prediction(s)', use_column_width='always')
 
-            with st.columns(3)[1]:
-                st.header("Status")
-            with st.columns(3)[1]:
-                st.markdown("{status}".format(status=status_img))
+                st1_status.markdown("{status}".format(status=status_img))
+                st2_ada.markdown("{ada}".format(ada=atribut_ada),unsafe_allow_html=True)
+                st3_tidak.markdown("{tidak}".format(tidak=atribut_tidak_ada),unsafe_allow_html=True)
 
     elif src == 'Sample data': 
         
         # Image selector slider
         imgpath = glob.glob('data/samples/images/*')
         imgsel = st.slider('Select random images from samples image.', min_value=1, max_value=len(imgpath), step=1)
+
+        with st.columns(3)[1]:
+            st.header("Status")
+            st1_status = st.markdown("{status}".format(status=status))
+        col1,col2,col3,col4 = st.columns(4)
+        
+        with col2:
+            st2_ada = st.markdown("{ada}".format(ada=ada),unsafe_allow_html=True)
+        with col3:
+            st3_tidak = st.markdown("{tidak}".format(tidak=tidak),unsafe_allow_html=True)
 
         image_file = imgpath[imgsel-1]
         col1, col2 = st.columns(2)
@@ -70,21 +92,23 @@ def imageInput(device, src):
         with col2:
             bbox, result,bbox_data = detect_image(image=image_file,size=(640,640),src="foto")
             img = create_bbox(img=image_file,bbox=bbox,bbox_data=bbox_data,src="foto")
-            status_img = count_atribut_image(result)
-            #img = img.convert('RGB')
+            status_img,atribut_ada,atribut_tidak_ada = count_atribut_image(result)
+
+            st1_status.markdown("{status}".format(status=status_img))
+            st2_ada.markdown("{ada}".format(ada=atribut_ada),unsafe_allow_html=True)
+            st3_tidak.markdown("{tidak}".format(tidak=atribut_tidak_ada),unsafe_allow_html=True)
+
             st.image(img, caption="Model prediction")
 
-        with st.columns(3)[1]:
-            st.header("Status")
-        with st.columns(3)[1]:
-            st.markdown("{status}".format(status=status_img))
 
 
 def videoInput(device, src,video=None):
     vid_file = None
+    status = "Loading..."
+    ada = "Loading..."
+    tidak = "Loading..."
+    
     if src == 'Sample data':
-
-
         vid_file = "data/samples/videos/{opt}.mp4".format(opt = video)
         outputpath = os.path.join('data/video_output', os.path.basename(vid_file))
     else:
@@ -97,7 +121,18 @@ def videoInput(device, src,video=None):
 
             with open(vid_file, mode='wb') as f:
                 f.write(uploaded_video.read())  # save video to disk
-    
+
+    with st.columns(3)[1]:
+        st.header("Status")
+        st1_status = st.markdown("{status}".format(status=status))
+
+    col1,col2,col3,col4 = st.columns(4)
+        
+    with col2:
+        st2_ada = st.markdown("{ada}".format(ada=ada),unsafe_allow_html=True)
+    with col3:
+        st3_tidak = st.markdown("{tidak}".format(tidak=tidak),unsafe_allow_html=True)
+
     col1, col2 = st.columns(2)
     if vid_file:
       with col1:
@@ -199,12 +234,11 @@ def videoInput(device, src,video=None):
 
       st.success("Done")
 
-      with st.columns(3)[1]:
-          st.header("Status")
+      status_vid,atribut_ada,atribut_tidak_ada = count_atribut_video(class_list_all_frames)
+      st1_status.markdown("{status}".format(status=status_vid))
+      st2_ada.markdown("{ada}".format(ada=atribut_ada),unsafe_allow_html=True)
+      st3_tidak.markdown("{tidak}".format(tidak=atribut_tidak_ada),unsafe_allow_html=True)
 
-      with st.columns(3)[1]:
-          status_vid = count_atribut_video(class_list_all_frames)
-          st.markdown("{status}".format(status=status_vid))
 
       with open(outputpath, 'rb') as file:
         st.sidebar.download_button(
@@ -307,33 +341,33 @@ def count_atribut_image(result):
       status = "Tidak ada atribut!"
       break
 
-  atribut_ada = "\nAtribut yang dipakai:\n"
-  atribut_tidak_ada = ". Atribut yang tidak dipakai:\n"
+  atribut_ada = "Atribut yang dipakai:<br>"
+  atribut_tidak_ada = "Atribut yang tidak dipakai:<br>"
 
   if len(class_list) != 0:
     if 0 in class_list:
-      atribut_ada += "--Badge\n"
+      atribut_ada += "-- Badge<br>"
     else:
-      atribut_tidak_ada += "--Badge\n"
+      atribut_tidak_ada += "<b>-- Badge</b<br>"
     if 1 in class_list:
-      atribut_ada += "--Dasi\n"
+      atribut_ada += "-- Dasi<br>"
     else:
-      atribut_tidak_ada += "--Dasi\n"
+      atribut_tidak_ada += "<b>-- Dasi</b><br>"
     if 2 in class_list:
-      atribut_ada += "--Sabuk\n"
+      atribut_ada += "-- Sabuk<br>"
     else:
-      atribut_tidak_ada += "--Sabuk\n"
+      atribut_tidak_ada += "<b>-- Sabuk</b><br>"
     if 3 in class_list:
-      atribut_ada += "--Topi\n"
+      atribut_ada += "-- Topi<br>"
     else:
-      atribut_tidak_ada += "--Topi\n"
+      atribut_tidak_ada += "<b>-- Topi</b><br>"
   
   if len(class_list) == 0:
-    atribut_tidak_ada += "--Badge\n--Dasi\n--Sabuk\n--Topi"
+    atribut_tidak_ada += "<b>-- Badge<br>-- Dasi<br>-- Sabuk<br>-- Topi</b>"
   
-  status += (atribut_ada + atribut_tidak_ada)
+  # status += (atribut_ada + atribut_tidak_ada)
 
-  return status
+  return status,atribut_ada,atribut_tidak_ada
 
 def count_atribut_video(class_list_all_frames):
   status = "Atribut siswa tidak lengkap!"
@@ -369,35 +403,37 @@ def count_atribut_video(class_list_all_frames):
     else:
       continue
 
-  atribut_ada = "\nAtribut yang dipakai:\n"
-  atribut_tidak_ada = ". Atribut yang tidak dipakai:\n"
+  atribut_ada = "Atribut yang dipakai:<br>"
+  atribut_tidak_ada = "Atribut yang tidak dipakai:<br>"
 
   if status == "Atribut siswa lengkap!":
-    status += (atribut_ada + " --Badge\n--Dasi\n--Sabuk\n--Topi" + atribut_tidak_ada)
+    # status += (atribut_ada + " --Badge<br>--Dasi<br>--Sabuk<br>--Topi" + atribut_tidak_ada)
+    atribut_ada += (atribut_ada + "--Badge<br>--Dasi<br>--Sabuk<br>--Topi")
   else:
     if count_0_badge + count_1_dasi + count_2_sabuk + count_3_topi > 0:
       if count_0_badge >= minimum_deteksi_frame:
-        atribut_ada += "--Badge\n"
+        atribut_ada += "--Badge<br>"
       else:
-        atribut_tidak_ada += "--Badge\n"
+        atribut_tidak_ada += "--Badge<br>"
       if count_1_dasi >= minimum_deteksi_frame:
-        atribut_ada += "--Dasi\n"
+        atribut_ada += "--Dasi<br>"
       else:
-        atribut_tidak_ada += "--Dasi\n"
+        atribut_tidak_ada += "--Dasi<br>"
       if count_2_sabuk >= minimum_deteksi_frame:
-        atribut_ada += "--Sabuk\n"
+        atribut_ada += "--Sabuk<br>"
       else:
-        atribut_tidak_ada += "--Sabuk\n"
+        atribut_tidak_ada += "--Sabuk<br>"
       if count_3_topi >= minimum_deteksi_frame:
-        atribut_ada += "--Topi\n"
+        atribut_ada += "--Topi<br>"
       else:
-        atribut_tidak_ada += "--Topi\n"
+        atribut_tidak_ada += "--Topi<br>"
   
-      status += (atribut_ada + atribut_tidak_ada)
+      # status += (atribut_ada + atribut_tidak_ada)
     else:
-      status += (atribut_ada + atribut_tidak_ada + "--Badge --Dasi --Sabuk --Topi")
+      # status += (atribut_ada + atribut_tidak_ada + "--Badge --Dasi --Sabuk --Topi")
+      atribut_tidak_ada += (atribut_tidak_ada + "--Badge<br>--Dasi<br>--Sabuk<br>--Topi")
 
-  return status
+  return status,atribut_ada,atribut_tidak_ada
 
 @st.cache_resource
 def load_model(path, device):
