@@ -143,6 +143,12 @@ def videoInput(device, src,video=None):
 
           st.video(video_bytes)
       class_list_all_frames = []
+      color_mapping = {
+          'bet': (255, 0, 0),   # Red
+          'topi': (0, 255, 0),   # Green
+          'dasi': (0, 0, 255),   # Blue
+          'sabuk': (255, 255, 0)  # Yellow
+      }
       with col2:
         with st.spinner('Wait for it...'):
               cap = cv2.VideoCapture(vid_file)
@@ -158,7 +164,7 @@ def videoInput(device, src,video=None):
                           break
 
                   gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-                  model.conf = 0.45
+                  model.conf = confidence
                   result = model(gray_frame)
                   bbox_data = result.pandas().xyxy[0]
                   bbox = []
@@ -198,14 +204,16 @@ def videoInput(device, src,video=None):
                             int(row['xmax']),
                             int(row['ymax']),
                         )
+                        class_name = row['name']
+                        color = color_mapping.get(class_name, (0, 0, 0))  # Default to black color if class not found
                         cv2.putText(
                             image_with_boxes,
                             label,
                             (xmin, ymin - 5),
                             cv2.FONT_HERSHEY_SIMPLEX,
-                            0.6,
-                            (0, 255, 0),  # font color (BGR format)
-                            1,
+                            0.7,
+                            color,  # font color (BGR format)
+                            2,
                             cv2.LINE_AA,
                         )
 
@@ -240,11 +248,11 @@ def videoInput(device, src,video=None):
       st3_tidak.markdown("{tidak}".format(tidak=atribut_tidak_ada),unsafe_allow_html=True)
 
 
-      with open(outputpath, 'rb') as file:
+      with open(output_file, 'rb') as file:
         st.sidebar.download_button(
               label="Download video result",
               data=file,
-              file_name=os.path.basename(outputpath),
+              file_name=os.path.basename(output_file),
               mime="video/mp4")
 
 def detect_image(image,src, size=None):
@@ -266,6 +274,13 @@ def detect_image(image,src, size=None):
     return bbox,result,bbox_data
 
 def create_bbox(img,bbox,bbox_data,src):
+  color_mapping = {
+          'bet': (255, 0, 0),   # Red
+          'topi': (0, 255, 0),   # Green
+          'dasi': (0, 0, 255),   # Blue
+          'sabuk': (255, 255, 0)  # Yellow
+      }
+
   if src =="foto":
     val_transform = A.Compose([
                 A.Resize(640, 640), # our input size can be 600px
@@ -308,14 +323,16 @@ def create_bbox(img,bbox,bbox_data,src):
             int(row['xmax']),
             int(row['ymax']),
         )
+        class_name = row['name']
+        color = color_mapping.get(class_name, (0, 0, 0))  # Default to black color if class not found
         cv2.putText(
             image_with_boxes,
             label,
             (xmin, ymin - 5),
             cv2.FONT_HERSHEY_SIMPLEX,
-            0.6,
-            (0, 255, 0),  # font color (BGR format)
-            1,
+            0.7,
+            color,  # font color (BGR format)
+            2,
             cv2.LINE_AA,
         )
 
@@ -348,7 +365,7 @@ def count_atribut_image(result):
     if 0 in class_list:
       atribut_ada += "-- Badge<br>"
     else:
-      atribut_tidak_ada += "<b>-- Badge</b<br>"
+      atribut_tidak_ada += "<b>-- Badge</b><br>"
     if 1 in class_list:
       atribut_ada += "-- Dasi<br>"
     else:
@@ -445,7 +462,7 @@ def load_model(path, device):
 def main():
     global model, confidence, cfg_model_path
 
-    st.header('Atribut Detection')
+    st.header('Sistem Pendeteksi Kelengkapan Atribut Seragam Siswa Sekolah')
     st.subheader('👈🏽 Select options left-haned menu bar.')
 
     # -- Sidebar
